@@ -13,8 +13,8 @@ module load linuxbrew/colsa
 
 ##Generate FastQC reports for your sequencing data##
 mkdir ./fastqcRawData
-#Create a list of files to be processed
-ls *fastq.gz > FilesToProcess
+#Create a list of files to be processed (does not process Undetermined fastq files)
+ls --ignore=Undetermined* | grep .fastq.gz > FilesToProcess
 #Run fastqc
 while read FilesToProcess; do
      fastqc -o fastqcRawData -t 24 -f fastq $FilesToProcess
@@ -39,6 +39,11 @@ while read UniqRootName; do
      AdapterRemoval --file1 $File1 --file2 $File2 --basename $UniqRootName --threads 24 --mate-separator ' ' --trimns --trimqualities --minquality 25 --maxns 150 --minlength 30 --adapter1 AGATCGGAAGAGCACACGTCTGAACTCCAGTCACNNNNNNNNATCTCGTATGCCGTCTTCTGCTTG --adapter2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTNNNNNNNNGTGTAGATCTCGGTGGTCGCCGTATCATT --collapse --combined-output --bzip2
      ##bzip2 $UniqRootName.pair1.truncated $UniqRootName.pair2.truncated $UniqRootName.singleton.truncated $UniqRootName.discarded
 done< UniqRootName
+
+#Cleanup tmp files
+rm FilesToProcess
+rm RootName
+rm UniqRootName
 
 #Recommended next step is to start mapping pipeline
 #see BWA-MEM_Alignment.sh 
