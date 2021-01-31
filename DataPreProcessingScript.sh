@@ -1,6 +1,6 @@
 #!/bin/bash
 #*********************************************************************#
-#Adapter Removal Script by Lindsey Fenderson                          #
+#Data Preprocessing Script by Lindsey Fenderson                       #
 #Current version 1.0 - January 30, 2021                               #
 #Simple script for creating fastqc reports on newly sequenced data,   #
 #  (code for double checking barcodes if needed),                     #
