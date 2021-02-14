@@ -10,10 +10,9 @@
 #Process assumes that sequencing data for the same individual generated on multiple lanes in the same sequencing run has already been concatenated and that the raw sequencing files have been named informatively according to the Kovach_Lab_File_Naming_SOPs.
 
 #To use this program:
-#   1.) Program assumes the raw reads are in fastq.gz format. If not, change the suffix as needed in lines 36, 37, 47, 48, and possibly  lines 49 and 50 if the fastqc output file format differs.
+#   1.) Program assumes the raw reads are in fastq.gz format. If not, change the suffix as needed in lines 35, 36, 46, 47, 105, and 129; and possibly  lines 48 and 49 if the fastqc output file format differs.
 #   2.) If desired, change the number of max Ns permitted before a read is discarded depending on the sequencing read length of your data (e.g., I used a max of 150Ns for 250bp reads, or no more than 60% of the read could be Ns) in line 71. Confirm other parameter choices.
 #   3.) Edit "Reports" and "Stats" and/or add the directory names or add any other files as needed for the raw sequencing metadata to be archived with the raw reads as relevant for your data (e.g, "report", "statsPlate1", "MD5.txt", "Summary.txt", "checkSize.xls", "Rawdata_Readme.pdf" etc.) in lines 77-78(+). Be sure to include the absolute or relative path if the files are not in the working directory.
-#   4.) Edit the root output compressed directory names for the raw reads and fastqc files in lines 110 and 116 to match the working directory.
 
 ##Expected output of this program: 
 # 1.) This program will generate fastqc analysis reports on the individual R1 and R2 raw sequencing data and output them to the folder 'fastqcRawData'. For whole genome shotgun data, at this stage it is expected the fastq files will fail the AdapterContent (others?) module. (Need to list fastqc parameters used). If any of the files fail the # modules, it is suggestive of machine failure and to contact the sequencing provider to have the samples sequenced again.
@@ -107,13 +106,17 @@ ls *.fastq.gz > AllFilesToProcess
 echo Reports >> AllFilesToProcess
 echo Stats >> AllFilesToProcess
 
-tar cvfj 20200728_INVS-SP_LFe_SparrowWholeGenomeShotgun_RawSequencingReads.tar.bz2 -T AllFilesToProcess
+#Automatically get directory name for the output file name
+Directory=$(pwd | rev | cut -d'/' -f 1 | rev)
+
+#Archive and compress the raw sequencing reads and reports
+tar cvfj $Directory_RawSequencingReads.tar.bz2 -T AllFilesToProcess
 
 #Archive and compress the fastqc data to organize directory and save disc space (pdf reports still available in working directory for review and easy addition to an electronic lab notebook)
 rsync -acv *_R1_fastqc.pdf fastqcRawData/
 rsync -acv *_R2_fastqc.pdf fastqcRawData/
 rsync -acv *.truncated_fastqc.pdf fastqcTrimmedData/
-tar cvfj 20200728_INVS-SP_LFe_SparrowWholeGenomeShotgun_FastQCReports.tar.bz2 fastqcRawData fastqcTrimmedData
+tar cvfj $Directory_FastQCReports.tar.bz2 fastqcRawData fastqcTrimmedData
 
 #Cleanup tmp files
 rm FilesToProcess
