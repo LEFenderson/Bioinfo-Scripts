@@ -32,7 +32,7 @@ AdapterRemoval --version
 ##Generate FastQC reports for your sequencing data##
 mkdir ./fastqcRawData
 #Create a list of files to be processed (DOES process Undetermined raw fastq files for fastqc)
-ls --ignore=Undetermined* | grep .fastq.gz > FilesToProces
+ls --ignore=Undetermined* | grep .fastq.gz > FilesToProcess
 ls *.fastq.gz > AllFilesToProcess
 #Run fastqc
 while read AllFilesToProcess; do
@@ -40,7 +40,7 @@ while read AllFilesToProcess; do
 done< AllFilesToProcess
 
 #Create a root name list
-cut -d"_" -f1-4 FilesToProcess > RootName
+cut -d"_" -f1-4 AllFilesToProcess > RootName
 sort RootName | uniq > UniqRootName
 
 Suffix1='_R1.fastq.gz'
@@ -51,14 +51,21 @@ Suffix1B='_R1_fastqc.pdf'
 Suffix2B='_R2_fastqc.pdf'
 
 while read UniqRootName; do
-     #Print the fastqc reports to pdf
+     #Print all of the fastqc reports to pdf
      File1A="$UniqRootName$Suffix1A"
      File2A="$UniqRootName$Suffix2A"
      File1B="$UniqRootName$Suffix1B"
      File2B="$UniqRootName$Suffix2B"
      pandoc fastqcRawData/$File1A -V geometry:landscape -t latex -o $File1B
      pandoc fastqcRawData/$File2A -V geometry:landscape -t latex -o $File2B
+done< UniqRootName
 
+#Recreate root name list without the Undetermined files
+cut -d"_" -f1-4 FilesToProcess > RootName
+sort RootName | uniq > UniqRootName
+
+#Run AdapterRemoval2 (does not process Undetermined fastq files)
+while read UniqRootName; do
      File1="$UniqRootName$Suffix1"
      File2="$UniqRootName$Suffix2"
      #Optional - Double check the adapters before trimming
