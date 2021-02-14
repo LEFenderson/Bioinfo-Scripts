@@ -1,7 +1,7 @@
 #!/bin/bash
 #*********************************************************************#
 #Data Preprocessing Script by Lindsey Fenderson                       #
-#Current version 1.1.0 - February 10, 2021                            #
+#Current version 1.1.1 - February 14, 2021                            #
 #Script for creating fastqc reports on newly sequenced data,          #
 #  (code for double checking barcodes if needed),                     #
 #  & trimming adapters with AdapterRemoval2 on UNH's Premise cluster. #
@@ -103,7 +103,7 @@ done< UniqRootName
 
 #Archive and compress the raw reads to organize the directory and save disc space
 #Create a list of files to be processed (DOES include Undetermined fastq files)
-ls .fastq.gz > AllFilesToProcess
+ls *.fastq.gz > AllFilesToProcess
 echo Reports >> AllFilesToProcess
 echo Stats >> AllFilesToProcess
 
@@ -121,6 +121,10 @@ rm RootName
 rm UniqRootName
 rm AllFilesToProcess
 rm TrimmedFiles
-
+rm -r Reports
+rm -r Stats
+rm *.fastq.gz
+rm -r fastqcRawData
+rm -r fastqcTrimmedData
 #Recommended next step is to start mapping pipeline
 #see BWA-MEM_Alignment.sh 
