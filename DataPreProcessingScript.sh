@@ -1,24 +1,27 @@
 #!/bin/bash
 #*********************************************************************#
 #Data Preprocessing Script by Lindsey Fenderson                       #
-#Current version 1.1.1 - February 14, 2021                            #
+#Current version 1.2.0 - February 14, 2021                            #
 #Script for creating fastqc reports on newly sequenced data,          #
 #  (code for double checking barcodes if needed),                     #
 #  & trimming adapters with AdapterRemoval2 on UNH's Premise cluster. #
 #*********************************************************************#
 
+
 #Process assumes that sequencing data for the same individual generated on multiple lanes in the same sequencing run has already been concatenated and that the raw sequencing files have been named informatively according to the Kovach_Lab_File_Naming_SOPs.
 
 #To use this program:
-#   1.) Program assumes the raw reads are in fastq.gz format. If not, change the suffix as needed in lines 35, 36, 46, 47, 108, and 133; and possibly lines 48 and 49 if the fastqc output file format differs.
-#   2.) If desired, change the number of max Ns permitted before a read is discarded depending on the sequencing read length of your data (e.g., I used a max of 150Ns for 250bp reads, or no more than 60% of the read could be Ns) in line 70. Confirm other parameter choices.
-#   3.) Edit "Reports" and "Stats" and/or add the directory names or add any other files as needed for the raw sequencing metadata to be archived with the raw reads as relevant for your data (e.g, "report", "statsPlate1", "MD5.txt", "Summary.txt", "checkSize.xls", "Rawdata_Readme.pdf" etc.) in lines 110-111(+). Be sure to include the absolute or relative path if the files are not in the working directory.
+#   1.) Program assumes the raw reads are in fastq.gz format. If not, change the suffix as needed in lines 38, 39, 49, 50, 169, and 191; and possibly lines 51 and 52 if the fastqc output file format differs.
+#   2.) If desired, change the number of max Ns permitted before a read is discarded depending on the sequencing read length of your data (e.g., I used a max of 150Ns for 250bp reads, or no more than 60% of the read could be Ns) in line 104. Confirm other parameter choices.
+#   3.) Edit "Reports" and "Stats" and/or add the directory names or add any other files as needed for the raw sequencing metadata to be archived with the raw reads as relevant for your data (e.g, "report", "statsPlate1", "MD5.txt", "Summary.txt", "checkSize.xls", "Rawdata_Readme.pdf" etc.) in lines 170-171(+). Be sure to include the absolute or relative path if the files are not in the working directory.
+#   4.) In your working directory, rename your undetermined/unknown fastq.gz files to have the same naming structure as the other files to make the script happy (i.e., the name must start with "Undetermined", then add 3 additional dummy fields for the "species", "sampling location" and "capture date" fields, separated by an underscore, e.g.: Undetermined_UNK_NA_S0_R1.fastq.gz)
+#   5.) Edit your configured rclone paths and source/destination names if needed in lines 219 & 220
 
 ##Expected output of this program: 
 # 1.) This program will generate fastqc analysis reports on the individual R1 and R2 raw sequencing data and output them to the folder 'fastqcRawData'. For whole genome shotgun data, at this stage it is expected the fastq files will fail the AdapterContent (others?) module. (Need to list fastqc parameters used). If any of the files fail the # modules, it is suggestive of machine failure and to contact the sequencing provider to have the samples sequenced again.
-# 2.) The program then quality trims adapters and low quality termini from reads and collapses overlapping read pairs using AdapterRemoval, with the parameters used described below in line 69. Output files will have the same root name as the input fastq files, with the suffix .pair#.truncated.bz2 (where # is the number 1 or 2 for reads 1 or 2 respectively).
+# 2.) The program then quality trims adapters and low quality termini from reads and collapses overlapping read pairs using AdapterRemoval, with the parameters used described below in line 103. Output files will have the same root name as the input fastq files, with the suffix .pair#.truncated.bz2 (where # is the number 1 or 2 for reads 1 or 2 respectively).
 # 3.) The program will then generate fastqc analysis reports on the individual R1 and R2 quality trimmed sequencing data generated in step 2 and output them to the folder 'fastqcTrimmedData'. At this stage it is expected the fastq files will now pass the AdapterContent (others?) module. It is also expected that the sequence length distribution module may be flagged, as there will be more variability in sequence length due to the collapsed reads. (Need to list fastqc parameters used)
-# 4.) Finally, the program performs some data and file cleanup and compression to best preserve disc space; archiving all of the raw reads along with any sequencer metadata and the adapter removal settings file in $Directory_RawSequencingReads.tar.bz2, and archiving all of the fastqc output for the raw and trimmed reads in $Directory_FastQCReports.tar.bz2. These files, along with all of the pdf Adapter Removal Settings files and fastqc reports are organized into the directory "RawReads-and-SequencingPreProcessingData". The script also records the fastqc and AdapterRemoval program version numbers that were used near the top of the slurm output file.
+# 4.) Finally, the program performs some data and file cleanup and compression to best preserve disc space; archiving all of the raw reads along with any sequencer metadata and the adapter removal settings file in $Directory_RawSequencingReads.tar.bz2, and archiving all of the fastqc output for the raw and trimmed reads in $Directory_FastQCReports.tar.bz2. These files, along with all of the pdf Adapter Removal Settings files and fastqc reports are organized into the directory "RawReads-and-SequencingPreProcessingData". Copies of the pdf output is automatically backed up to Box and LaTeX code written to easily import and index the pdfs into an electronic lab notebook. The script also records the fastqc and AdapterRemoval program version numbers that were used near the top of the slurm output file.
 #   ***Note 1: As per our Kovach_Lab_Data_Management_User_Guide-START_HERE SOP, it is STRONGLY recommended (required?!) that the raw sequencing reads are backed up in 2 separate locations (both in the cloud and on a physical hard drive located on campus) and that the integrity of the backups is confirmed PRIOR to running this script, since the combined raw read file archive may be too large to effectively upload or download to other backup locations (or it could get corrupted in the process) and the individual raw read files will be deleted once they are added to the archive (so you should still be able to access the raw reads if you decompress and unarchive the $Directory_RawSequencingReads.tar.bz2 file, however there is always a risk of data loss if the file gets corrupted). 
 
 module purge
@@ -50,15 +53,39 @@ Suffix2A='_R2_fastqc.html'
 Suffix1B='_R1_fastqc.pdf'
 Suffix2B='_R2_fastqc.pdf'
 
+#Parse directory name & start LaTeX code for ELN
+Directory=$(pwd | rev | cut -d'/' -f 1 | rev)
+SeqDate=$(echo $Directory | cut -d'_' -f 1 )
+SeqPlatform=$(echo $Directory | cut -d'_' -f 2 )
+SeqPerson=$(echo $Directory | cut -d'_' -f 3 )
+SeqDescription=$(echo $Directory | cut -d'_' -f 4 )
+touch $Directory-ELNLaTeXCodeFastQCRawReads.txt
+echo "\subsection{$SeqDate\_$SeqPlatform\_$SeqPerson\_$SeqDescription}" >> $Directory-ELNLaTeXCodeFastQCRawReads.txt
+echo '\begin{landscape} %Rotates the below pages to landscape orientation. Note also the 'angle=-270' command added to the \includepdf options; this inserts the pdf into landscape orientation on the page as well.' >> $Directory-ELNLaTeXCodeFastQCRawReads.txt
+
 while read UniqRootName; do
-     #Print all of the fastqc reports to pdf
-     File1A="$UniqRootName$Suffix1A"
-     File2A="$UniqRootName$Suffix2A"
-     File1B="$UniqRootName$Suffix1B"
-     File2B="$UniqRootName$Suffix2B"
-     pandoc fastqcRawData/$File1A -V geometry:landscape -t latex -o $File1B
-     pandoc fastqcRawData/$File2A -V geometry:landscape -t latex -o $File2B
+    #Print all of the fastqc reports to pdf
+    File1A="$UniqRootName$Suffix1A"
+    File2A="$UniqRootName$Suffix2A"
+    File1B="$UniqRootName$Suffix1B"
+    File2B="$UniqRootName$Suffix2B"
+    pandoc fastqcRawData/$File1A -V geometry:landscape -t latex -o $File1B
+    pandoc fastqcRawData/$File2A -V geometry:landscape -t latex -o $File2B
+    #Automatically generate LaTeX code to insert pdf fastqc reports into electronic lab notebook
+    echo '\phantomsection' >> $Directory-ELNLaTeXCodeFastQCRawReads.txt
+    #Parse sample name
+    SampleID=$(echo $UniqRootName | cut -d'_' -f 1 )
+    Species=$(echo $UniqRootName | cut -d'_' -f 2 )
+    SampleLoc=$(echo $UniqRootName | cut -d'_' -f 3 )
+    CaptureDate=$(echo $UniqRootName | cut -d'_' -f 4 )
+    echo "\addcontentsline{toc}{subsubsection}{$SampleID\_$Species\_$SampleLoc\_$CaptureDate}" >> $Directory-ELNLaTeXCodeFastQCRawReads.txt
+    echo "\index[sample]{$SampleID\_$Species\_$SampleLoc\_$CaptureDate\!FastQC Reports\!Raw data|(}" >> $Directory-ELNLaTeXCodeFastQCRawReads.txt
+    echo "\includepdf[pages=-,frame,scale=0.85,angle=-270,pagecommand={\pagestyle{fancy}}]{/Users/Lindsey/Box/KovachLab/Data/Sparrows/GECO/Data/SparrowRawData/$Directory/FastQCReports/fastqcRawData/$UniqRootName$Suffix1B}" >> $Directory-ELNLaTeXCodeFastQCRawReads.txt
+    echo "\includepdf[pages=-,frame,scale=0.85,angle=-270,pagecommand={\pagestyle{fancy}}]{/Users/Lindsey/Box/KovachLab/Data/Sparrows/GECO/Data/SparrowRawData/$Directory/FastQCReports/fastqcRawData/$UniqRootName$Suffix2B}" >> $Directory-ELNLaTeXCodeFastQCRawReads.txt
+    echo "\index[sample]{$SampleID\_$Species\_$SampleLoc\_$CaptureDate\!FastQC Reports\!Raw data|)}" >> $Directory-ELNLaTeXCodeFastQCRawReads.txt
+    echo "" >> ELNLaTeXCodeFastQCRawReads.txt
 done< UniqRootName
+echo '\end{landscape} %Stops rotating pages to landscape orientation.' >> $Directory-ELNLaTeXCodeFastQCRawReads.txt
 
 #Recreate root name list without the Undetermined files
 cut -d"_" -f1-4 FilesToProcess > RootName
@@ -87,6 +114,13 @@ while read TrimmedFiles; do
      fastqc -o fastqcTrimmedData -t 24 -f fastq $TrimmedFiles
 done< TrimmedFiles
 
+#Start LaTeX code for ELN
+touch $Directory-ELNLaTeXCodeFastQCTrimmedReads.txt
+echo "\subsection{$SeqDate\_$SeqPlatform\_$SeqPerson\_$SeqDescription}" >> $Directory-ELNLaTeXCodeFastQCTrimmedReads.txt
+echo '\begin{landscape} %Rotates the below pages to landscape orientation. Note also the 'angle=-270' command added to the \includepdf options; this inserts the pdf into landscape orientation on the page as well.' >> $Directory-ELNLaTeXCodeFastQCTrimmedReads.txt
+touch $Directory-ELNLaTeXCodeAdapterRemovalSettings.txt
+echo "\subsection{$SeqDate\_$SeqPlatform\_$SeqPerson\_$SeqDescription}" >> $Directory-ELNLaTeXCodeAdapterRemovalSettings.txt
+
 #Print the fastqc reports & adapter removal settings to pdf
 while read UniqRootName; do
     Suffix1C='.pair1.truncated_fastqc.html'
@@ -104,7 +138,27 @@ while read UniqRootName; do
      pandoc fastqcTrimmedData/$File1C -V geometry:landscape -t latex -o $File1D
      pandoc fastqcTrimmedData/$File2C -V geometry:landscape -t latex -o $File2D
      pandoc $File1E -t latex -o $File1F
+    #Automatically generate LaTeX code to insert pdf fastqc reports into electronic lab notebook
+    echo '\phantomsection' >> $Directory-ELNLaTeXCodeFastQCTrimmedReads.txt
+    #Parse sample name
+    SampleID=$(echo $UniqRootName | cut -d'_' -f 1 )
+    Species=$(echo $UniqRootName | cut -d'_' -f 2 )
+    SampleLoc=$(echo $UniqRootName | cut -d'_' -f 3 )
+    CaptureDate=$(echo $UniqRootName | cut -d'_' -f 4 )
+    echo "\subsubsection{$SampleID\_$Species\_$SampleLoc\_$CaptureDate}" >> $Directory-ELNLaTeXCodeAdapterRemovalSettings.txt
+    echo "\addcontentsline{toc}{subsubsection}{$SampleID\_$Species\_$SampleLoc\_$CaptureDate}" >> $Directory-ELNLaTeXCodeFastQCTrimmedReads.txt
+    echo "\index[sample]{$SampleID\_$Species\_$SampleLoc\_$CaptureDate\!FastQC Reports\!Trimmed data|(}" >> $Directory-ELNLaTeXCodeFastQCTrimmedReads.txt
+    echo "\addcontentsline{toc}{subsubsection}{$SampleID\_$Species\_$SampleLoc\_$CaptureDate}" >> $Directory-ELNLaTeXCodeAdapterRemovalSettings.txt
+    echo "\index[sample]{$SampleID\_$Species\_$SampleLoc\_$CaptureDate\!Adapter \& Quality Trimming Reports|(}" >> $Directory-ELNLaTeXCodeAdapterRemovalSettings.txt
+    echo "\includepdf[pages=-,frame,scale=0.85,angle=-270,pagecommand={\pagestyle{fancy}}]{/Users/Lindsey/Box/KovachLab/Data/Sparrows/GECO/Data/SparrowRawData/$Directory/FastQCReports/fastqcTrimmedData/$UniqRootName$Suffix1D}" >> $Directory-ELNLaTeXCodeFastQCTrimmedReads.txt
+    echo "\includepdf[pages=-,frame,scale=0.85,angle=-270,pagecommand={\pagestyle{fancy}}]{/Users/Lindsey/Box/KovachLab/Data/Sparrows/GECO/Data/SparrowRawData/$Directory/FastQCReports/fastqcTrimmedData/$UniqRootName$Suffix2D}" >> $Directory-ELNLaTeXCodeFastQCTrimmedReads.txt
+    echo "\includepdf[pages=-,frame,scale=0.85,pagecommand={\pagestyle{fancy}}]{/Users/Lindsey/Box/KovachLab/Data/Sparrows/GECO/Data/SparrowRawData/$Directory/AdapterRemovalSettings/$UniqRootName$Suffix1F}" >> $Directory-ELNLaTeXCodeAdapterRemovalSettings.txt
+    echo "\index[sample]{$SampleID\_$Species\_$SampleLoc\_$CaptureDate\!FastQC Reports\!Trimmed data|)}" >> $Directory-ELNLaTeXCodeFastQCTrimmedReads.txt
+    echo "\index[sample]{$SampleID\_$Species\_$SampleLoc\_$CaptureDate\!Adapter \& Quality Trimming Reports|)}" >> $Directory-ELNLaTeXCodeAdapterRemovalSettings.txt
+    echo "" >> $Directory-ELNLaTeXCodeFastQCTrimmedReads.txt
+    echo "" >> $Directory-ELNLaTeXCodeAdapterRemovalSettings.txt
 done< UniqRootName
+echo '\end{landscape} %Stops rotating pages to landscape orientation.' >> $Directory-ELNLaTeXCodeFastQCTrimmedReads.txt
 
 #Archive the Adapter Removal settings files
 mkdir AdapterRemovalSettings
@@ -116,9 +170,6 @@ ls *.fastq.gz > AllFilesToProcess
 echo Reports >> AllFilesToProcess
 echo Stats >> AllFilesToProcess
 echo AdapterRemovalSettings >> AllFilesToProcess
-
-#Automatically get directory name for the output archive file names
-Directory=$(pwd | rev | cut -d'/' -f 1 | rev)
 
 #Archive and compress the raw sequencing reads and reports
 tar cvfj $Directory_RawSequencingReads.tar.bz2 -T AllFilesToProcess
@@ -163,5 +214,13 @@ rm *_FastQCReports.tar.bz2
 rm *_RawSequencingReads.tar.bz2
 rm -r AdapterRemovalSettings
 rm -r FastQCReports
+
+#Backup newly created files
+Path=$(pwd)
+BoxPath='/KovachLab/Data/Sparrows/GECO/Data/SparrowRawData/'
+rclone copy Premise:$Path/RawReads-and-SequencingPreProcessingData/AdapterRemovalSettings Box:$BoxPath$Directory
+rclone copy Premise:$Path/RawReads-and-SequencingPreProcessingData/FastQCReports Box:$BoxPath$Directory
+rclone copy Premise:$Path --include "*.truncated.bz2" Box:$BoxPath$Directory
+
 #Recommended next step is to start mapping pipeline
 #see BWA-MEM_Alignment.sh 
